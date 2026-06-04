@@ -173,24 +173,23 @@ RUN chmod +x /app/scripts/*.sh
 # linuxserver/webtop uses s6-overlay for service management
 # We add our services as s6-overlay init scripts
 # ─────────────────────────────────────────────────────────────────────────────
-# Add nginx proxy as an s6 service
+# Add nginx proxy as an s6 service (listens on 7860 → proxies to 3000)
 RUN mkdir -p /etc/s6-overlay/s6-rc.d/nginx-proxy
 RUN printf '#!/command/with-contenv bash\nexec nginx -c /etc/nginx/nginx-proxy.conf -g "daemon off;"\n' \
     > /etc/s6-overlay/s6-rc.d/nginx-proxy/run \
     && chmod +x /etc/s6-overlay/s6-rc.d/nginx-proxy/run
+RUN printf 'longrun\n' > /etc/s6-overlay/s6-rc.d/nginx-proxy/type
 RUN printf '3\n' > /etc/s6-overlay/s6-rc.d/nginx-proxy/notification-fd
-RUN touch /etc/s6-overlay/s6-rc.d/nginx-proxy/down
 
 # Create the bundle that enables nginx-proxy
 RUN mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d/nginx-proxy
 
-# Add our custom startup script
+# Add our custom startup script as a oneshot
 RUN mkdir -p /etc/s6-overlay/s6-rc.d/custom-init
 RUN printf '#!/command/with-contenv bash\n/app/scripts/start.sh\n' \
     > /etc/s6-overlay/s6-rc.d/custom-init/run \
     && chmod +x /etc/s6-overlay/s6-rc.d/custom-init/run
-RUN printf '3\n' > /etc/s6-overlay/s6-rc.d/custom-init/notification-fd
-RUN touch /etc/s6-overlay/s6-rc.d/custom-init/down
+RUN printf 'oneshot\n' > /etc/s6-overlay/s6-rc.d/custom-init/type
 RUN mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d/custom-init
 
 # Create app directories
