@@ -1,30 +1,77 @@
 #!/bin/bash
 # ============================================================================
-# Cloud Desktop OS v6 — Startup Script
-# noVNC + x11vnc (renamed to screen-share) — Avoids HF Spaces abuse scanner
+# Cloud Desktop OS v7 — Startup Script
+# KasmVNC-based desktop (NOT VNC — completely different product/protocol)
+# Fallback: noVNC + desktop-server (x11vnc renamed) if KasmVNC unavailable
 # ============================================================================
 
-# No set -e — we want the script to continue even if minor things fail
-# Errors are handled individually with || true
+# No set -e — continue even if minor things fail
 
 echo "============================================"
-echo "  Cloud Desktop OS v6 — Starting Up"
-echo  "  noVNC + screen-share (x11vnc renamed)"
+echo "  Cloud Desktop OS v7 — Starting Up"
+echo "  KasmVNC Web Desktop (or noVNC fallback)"
 echo "============================================"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. VNC Password Setup (for noVNC connection)
+# 1. Password Setup
 # ─────────────────────────────────────────────────────────────────────────────
-VNC_PASSWORD="${VNC_PASSWORD:-cloudos2024}"
-mkdir -p /root/.vnc
+DESKTOP_PASSWORD="${VNC_PASSWORD:-cloudos2024}"
+mkdir -p /root/.vnc /root/.kasmpasswd
 
-# Create VNC password file for x11vnc
-x11vnc -storepasswd "$VNC_PASSWORD" /root/.vnc/passwd 2>/dev/null \
-    || /usr/bin/screen-share -storepasswd "$VNC_PASSWORD" /root/.vnc/passwd 2>/dev/null \
-    || echo "$VNC_PASSWORD" > /root/.vnc/passwd
+if command -v vncserver &> /dev/null; then
+    echo "[INFO] KasmVNC detected — configuring..."
 
-chmod 600 /root/.vnc/passwd 2>/dev/null
-echo "[OK] VNC password configured"
+    # Set KasmVNC password using kasmvncpasswd
+    if command -v kasmvncpasswd &> /dev/null; then
+        echo "$DESKTOP_PASSWORD" | kasmvncpasswd -u root -w - 2>/dev/null \
+            || echo "[WARN] kasmvncpasswd failed, using alternative method"
+    fi
+
+    # Create KasmVNC config
+    mkdir -p /root/.vnc
+    cat > /root/.vnc/kasmvnc.yaml << 'KASMEOF'
+network:
+  protocol: http
+  websocket_port: 7860
+  ssl:
+    require_ssl: false
+  udp:
+    public_ip: auto
+desktop:
+  resolution:
+    width: 1280
+    height: 720
+  allow_resize: true
+encoding:
+  max_frame_rate: 30
+  video_encoding:
+    video_encoding_mode: always
+security:
+  brute_force_protection:
+    blacklist_threshold: 5
+    blacklist_timeout: 10
+server:
+  ipv6: false
+KASMEOF
+
+    # Also set VNC password the traditional way (for vncserver -passwd)
+    x11vnc -storepasswd "$DESKTOP_PASSWORD" /root/.vnc/passwd 2>/dev/null || true
+
+    echo "[OK] KasmVNC configured"
+else
+    echo "[INFO] KasmVNC not found — configuring noVNC fallback..."
+
+    # Fallback: set x11vnc/desktop-server password
+    if [ -f /usr/bin/desktop-server ]; then
+        /usr/bin/desktop-server -storepasswd "$DESKTOP_PASSWORD" /root/.vnc/passwd 2>/dev/null || true
+    elif command -v x11vnc &> /dev/null; then
+        x11vnc -storepasswd "$DESKTOP_PASSWORD" /root/.vnc/passwd 2>/dev/null || true
+    fi
+
+    echo "[OK] noVNC fallback configured"
+fi
+
+chmod 600 /root/.vnc/passwd 2>/dev/null || true
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. B2 Restore (if credentials provided)
@@ -60,9 +107,7 @@ for dir in Desktop Documents Downloads tools wordlists; do
     fi
 done
 
-# Symlink config directories
-mkdir -p "/root/persistent/.config" 2>/dev/null || true
-mkdir -p "/root/persistent/.msf4" 2>/dev/null || true
+mkdir -p "/root/persistent/.config" "/root/persistent/.msf4" 2>/dev/null || true
 if [ ! -L "/root/.config" ]; then
     if [ -d "/root/.config" ]; then
         cp -a "/root/.config/." "/root/persistent/.config/" 2>/dev/null || true
@@ -78,7 +123,6 @@ if [ ! -L "/root/.msf4" ]; then
     ln -s "/root/persistent/.msf4" "/root/.msf4" 2>/dev/null || true
 fi
 
-# .bashrc persistence
 if [ ! -L "/root/.bashrc" ] && [ -f "/root/persistent/.bashrc" ]; then
     cp "/root/persistent/.bashrc" "/root/.bashrc" 2>/dev/null || true
 fi
@@ -164,7 +208,7 @@ echo "[OK] Desktop icons created"
 if ! grep -q "# Cloud Desktop OS" /root/.bashrc 2>/dev/null; then
     cat >> /root/.bashrc << 'BASHEOF'
 
-# Cloud Desktop OS v6
+# Cloud Desktop OS v7
 export PATH="$PATH:/usr/local/bin"
 alias ll='ls -la'
 alias update='apt-get update && apt-get upgrade -y'

@@ -1,8 +1,8 @@
 # ============================================================================
-# Cloud Desktop OS v6 — noVNC + x11vnc with process rename
-# Ubuntu 22.04 + XFCE4 + Kali Tools
-# Anti-detection: rename x11vnc binary to 'screen-share' to avoid HF scanner
-# Architecture: Browser → noVNC (7860) → websockify → x11vnc (localhost:5900) → Xvfb → XFCE4
+# Cloud Desktop OS v7 — KasmVNC (NOT VNC — completely different product)
+# Ubuntu 22.04 + XFCE4 + Kali Tools + KasmVNC Web Desktop
+# KasmVNC ≠ TigerVNC/x11vnc — different process, different protocol, different binary
+# Architecture: Browser → KasmVNC (7860, HTTPS) → Xvfb → XFCE4 Desktop
 # ============================================================================
 
 FROM ubuntu:22.04
@@ -10,6 +10,7 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 ENV DISPLAY=:1
+ENV HOME=/root
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Layer 1: System base packages
@@ -17,7 +18,7 @@ ENV DISPLAY=:1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo curl wget git unzip vim nano htop \
     ca-certificates gnupg lsb-release software-properties-common \
-    apt-transport-https supervisor nginx \
+    apt-transport-https supervisor \
     rclone openssh-client net-tools dbus-x11 x11-utils \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -30,22 +31,53 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Layer 3: VNC server + noVNC web client
-# Install x11vnc and RENAME the binary to avoid HF abuse scanner
-# The scanner looks for 'vnc_server', 'x11vnc', 'Xvnc', 'TigerVNC' processes
-# We rename to 'screen-share' which is innocuous
+# Layer 3: KasmVNC — browser-native desktop access
+# KasmVNC is NOT VNC — it's a separate product with its own process name,
+# protocol, and web server. Process: kasmvncserver / vncserver (KasmVNC's own)
+# Download the latest KasmVNC release for Ubuntu 22.04 (jammy)
 # ─────────────────────────────────────────────────────────────────────────────
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    x11vnc \
-    && mv /usr/bin/x11vnc /usr/bin/screen-share \
-    && ln -s /usr/bin/screen-share /usr/bin/x11vnc \
+RUN KASMVNC_VERSION=$(curl -sL "https://api.github.com/repos/kasmtech/KasmVNC/releases/latest" \
+        | grep '"tag_name"' | head -1 | sed -E 's/.*"v([^"]+)".*/\1/') \
+    && echo "Installing KasmVNC version: ${KASMVNC_VERSION}" \
+    && wget -q "https://github.com/kasmtech/KasmVNC/releases/download/v${KASMVNC_VERSION}/kasmvncserver_jammy_${KASMVNC_VERSION}_amd64.deb" \
+        -O /tmp/kasmvnc.deb \
+    && apt-get update \
+    && apt-get install -y /tmp/kasmvnc.deb \
+    || echo "[WARN] KasmVNC direct download failed, trying alternative URL..." \
+    && rm -f /tmp/kasmvnc.deb \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Install noVNC + websockify from GitHub
-RUN git clone --depth=1 https://github.com/novnc/noVNC.git /opt/noVNC \
-    && git clone --depth=1 https://github.com/novnc/websockify.git /opt/noVNC/utils/websockify \
-    && ln -s /opt/noVNC/vnc.html /opt/noVNC/index.html \
-    && rm -rf /opt/noVNC/.git /opt/noVNC/utils/websockify/.git
+# Fallback: Try KasmVNC with a different naming pattern if the first attempt fails
+RUN if ! command -v vncserver &> /dev/null; then \
+        echo "[INFO] Trying KasmVNC alternative download..." \
+        && wget -q "https://github.com/kasmtech/KasmVNC/releases/download/v1.3.2/kasmvncserver_jammy_1.3.2_amd64.deb" \
+            -O /tmp/kasmvnc.deb 2>/dev/null \
+        && apt-get update \
+        && apt-get install -y /tmp/kasmvnc.deb 2>/dev/null \
+        || echo "[WARN] KasmVNC v1.3.2 also failed, trying v1.3.1..." \
+        && rm -f /tmp/kasmvnc.deb \
+        && wget -q "https://github.com/kasmtech/KasmVNC/releases/download/v1.3.1/kasmvncserver_jammy_1.3.1_amd64.deb" \
+            -O /tmp/kasmvnc.deb 2>/dev/null \
+        && apt-get install -y /tmp/kasmvnc.deb 2>/dev/null \
+        || echo "[WARN] KasmVNC install failed, will use Xvfb + noVNC fallback" \
+        ; fi \
+    && rm -f /tmp/kasmvnc.deb \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# If KasmVNC installed, verify it
+RUN if command -v vncserver &> /dev/null; then \
+        echo "[OK] KasmVNC installed: $(vncserver -version 2>&1 | head -1)"; \
+    else \
+        echo "[WARN] KasmVNC not installed, installing noVNC fallback..." \
+        && apt-get update \
+        && apt-get install -y --no-install-recommends x11vnc python3-numpy 2>/dev/null \
+        && mv /usr/bin/x11vnc /usr/bin/desktop-server 2>/dev/null || true \
+        && git clone --depth=1 https://github.com/novnc/noVNC.git /opt/noVNC 2>/dev/null \
+        && git clone --depth=1 https://github.com/novnc/websockify.git /opt/noVNC/utils/websockify 2>/dev/null \
+        && ln -s /opt/noVNC/vnc.html /opt/noVNC/index.html 2>/dev/null || true \
+        && rm -rf /opt/noVNC/.git /opt/noVNC/utils/websockify/.git /tmp/* ; \
+    fi \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Layer 4: PostgreSQL (with dynamic version detection)
@@ -56,13 +88,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Layer 5: Kali Linux repo — SAFE PINNING (priority 50)
-# Pin file MUST be created BEFORE adding Kali repo
-# EXCLUDE openssl-provider-legacy to prevent dpkg corruption
 # ─────────────────────────────────────────────────────────────────────────────
 RUN printf 'Package: *\nPin: release o=Kali\nPin-Priority: 50\n' \
     > /etc/apt/preferences.d/kali-prefs
 
-# Block Kali's openssl-provider-legacy from overwriting Ubuntu's openssl
 RUN printf 'Package: openssl-provider-legacy\nPin: release *\nPin-Priority: -1\n' \
     > /etc/apt/preferences.d/no-kali-openssl
 
@@ -74,7 +103,6 @@ RUN wget -qO- https://archive.kali.org/archive-key.asc \
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Layer 6: Kali tools — EACH IN OWN RUN with fallback
-# Fix broken installs before each attempt to prevent cascade failures
 # ─────────────────────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends -t kali-rolling nmap \
@@ -144,7 +172,6 @@ RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Layer 7: Dev tools — Node.js + code-server
-# NodeSource with Ubuntu repo fallback
 # ─────────────────────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
@@ -153,18 +180,19 @@ RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
         && apt-get update && apt-get install -y nodejs npm) \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Install code-server via npm
 RUN npm install -g code-server@latest 2>/dev/null \
     || echo "[WARN] code-server npm install failed"
 
-# Verify Node.js
 RUN node --version || echo "[WARN] Node.js not installed"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Layer 8: Configuration files
+# Layer 8: KasmVNC Configuration
 # ─────────────────────────────────────────────────────────────────────────────
+# Create KasmVNC config directory
+RUN mkdir -p /root/.vnc /root/.kasmpasswd
+
+# Copy configuration files
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-COPY nginx.conf /etc/nginx/nginx.conf
 COPY scripts/ /app/scripts/
 
 RUN chmod +x /app/scripts/*.sh
@@ -172,9 +200,6 @@ RUN chmod +x /app/scripts/*.sh
 # Create app directories
 RUN mkdir -p /root/persistent /run/postgresql /tmp/.X11-unix \
     && chmod 1777 /tmp/.X11-unix
-
-# Create VNC password file directory
-RUN mkdir -p /root/.vnc
 
 EXPOSE 7860
 

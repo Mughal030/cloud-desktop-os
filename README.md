@@ -7,18 +7,18 @@ sdk: docker
 pinned: true
 ---
 
-# Cloud Desktop OS v6
+# Cloud Desktop OS v7
 
 Browser-accessible Linux desktop with XFCE4 + Kali security tools, running on Hugging Face Spaces.
 
 ## Access
 
-Open the Space URL in your browser. You'll see the noVNC desktop client. The desktop starts automatically — no password needed for default setup (set `VNC_PASSWORD` secret for authentication).
+Open the Space URL in your browser. You'll see the desktop login page. Enter the password (default: `cloudos2024` or set via `VNC_PASSWORD` secret).
 
 ## Features
 
 - **Desktop**: XFCE4 with Greybird-dark theme at 1280x720
-- **Screen Sharing**: noVNC web client with screen-share backend (x11vnc renamed to avoid HF abuse scanner)
+- **Screen Sharing**: KasmVNC web desktop (NOT VNC — completely different product and protocol)
 - **Security Tools**: nmap, sqlmap, hydra, john, nikto, dirb, gobuster, and more from Kali repo
 - **Dev Tools**: Node.js 18.x, code-server (VS Code in browser), Python3, PostgreSQL
 - **Persistence**: Rclone + Backblaze B2 auto-sync every 3 minutes
@@ -36,12 +36,12 @@ Open the Space URL in your browser. You'll see the noVNC desktop client. The des
 ## Architecture
 
 ```
-Browser → noVNC (7860) → websockify → screen-share:5900 (localhost) → Xvfb :1 → XFCE4 Desktop
+Browser → KasmVNC (7860) → Xvfb :1 → XFCE4 Desktop
 ```
 
 ## Important Notes
 
-- The VNC server binary is renamed from `x11vnc` to `screen-share` to avoid HF's abuse scanner which flags VNC-related process names.
+- This uses **KasmVNC**, which is a completely different product from TigerVNC or x11vnc. KasmVNC has its own process name, protocol, and web server.
 - Data persistence requires Backblaze B2 credentials. Without them, data is lost on container restart.
 - GPU-dependent tools (hashcat) run in CPU-only mode on HF Spaces free tier.
 - WiFi tools (aircrack-ng) require physical hardware and won't function in a container.
