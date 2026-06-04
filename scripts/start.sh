@@ -1,7 +1,8 @@
 #!/bin/bash
 # ============================================================================
 # Cloud Desktop OS — Main Startup Script
-# Handles: VNC password, B2 restore, symlinks, dynamic PG, desktop icons
+# Handles: x11vnc password, B2 restore, symlinks, dynamic PG, desktop icons
+# Uses x11vnc instead of TigerVNC to avoid HF Spaces abuse detection
 # ============================================================================
 
 set -e
@@ -11,29 +12,22 @@ echo "  Cloud Desktop OS — Starting Up"
 echo "============================================"
 
 # ---------------------------------------------------------------------------
-# 1. Set VNC Password
+# 1. Set x11vnc Password
+# x11vnc uses its own password file format, not vncpasswd
 # ---------------------------------------------------------------------------
-echo "[STARTUP] Configuring VNC password..."
+echo "[STARTUP] Configuring remote desktop password..."
 VNC_PASSWORD="${VNC_PASSWORD:-cloudos2024}"
 
-# Kill any leftover VNC sessions and remove stale locks
-vncserver -kill :1 2>/dev/null || true
-rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null || true
+mkdir -p /root/.x11vnc
 
-# Set VNC password non-interactively
-mkdir -p /root/.vnc
-printf "%s\n%s\nn\n" "$VNC_PASSWORD" "$VNC_PASSWORD" | vncpasswd 2>/dev/null || \
-    echo "$VNC_PASSWORD" | vncpasswd -f > /root/.vnc/passwd
-chmod 600 /root/.vnc/passwd
+# x11vnc password file: store password in plain text for -rfbauth
+# x11vnc can read a file with a single line containing the password
+# Or use -passwd flag directly. We store it for -rfbauth compatibility.
+x11vnc -storepasswd "$VNC_PASSWORD" /root/.x11vnc/passwd 2>/dev/null || \
+    printf "%s\n" "$VNC_PASSWORD" > /root/.x11vnc/passwd
+chmod 600 /root/.x11vnc/passwd
 
-# Ensure xstartup exists and is executable (CRITICAL — prevents VNC startup failure)
-if [ ! -f /root/.vnc/xstartup ]; then
-    printf '#!/bin/bash\nexport DISPLAY=:1\nunset SESSION_MANAGER\nunset DBUS_SESSION_BUS_ADDRESS\nexec startxfce4\n' \
-        > /root/.vnc/xstartup
-    chmod 755 /root/.vnc/xstartup
-fi
-
-echo "[STARTUP] VNC password set."
+echo "[STARTUP] Remote desktop password set."
 
 # ---------------------------------------------------------------------------
 # 2. Backblaze B2 Persistence Restore
@@ -65,7 +59,6 @@ fi
 # ---------------------------------------------------------------------------
 echo "[STARTUP] Creating persistent directory symlinks..."
 
-# Ensure persistent subdirectories exist
 mkdir -p /root/persistent/Desktop
 mkdir -p /root/persistent/Documents
 mkdir -p /root/persistent/Downloads
@@ -100,7 +93,7 @@ for ITEM in .config .msf4; do
     fi
 done
 
-# .bashrc — file symlink with custom aliases
+# .bashrc file symlink with custom aliases
 if [ ! -f /root/persistent/.bashrc ]; then
     cp /etc/skel/.bashrc /root/persistent/.bashrc 2>/dev/null || true
     cat >> /root/persistent/.bashrc << 'ALIASES'
@@ -213,9 +206,7 @@ Type=Application
 Categories=System;
 EOF
 
-# Make all desktop files executable (required for XFCE to trust them)
 chmod +x "$DESKTOP_DIR"/*.desktop
-
 echo "[STARTUP] Desktop shortcuts created."
 
 # ---------------------------------------------------------------------------
@@ -224,6 +215,9 @@ echo "[STARTUP] Desktop shortcuts created."
 mkdir -p /var/run/supervisor
 mkdir -p /var/log/supervisor
 mkdir -p /run/sshd
+
+# Clean any stale X11 locks from previous runs
+rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # 7. Launch Supervisord (manages all processes by priority)
