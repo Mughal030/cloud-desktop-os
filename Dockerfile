@@ -1,7 +1,6 @@
 # ============================================================================
 # Web Development Environment
 # Debian + XFCE4 + TigerVNC + noVNC on port 7860
-# Based on proven working HF Spaces template
 # ============================================================================
 
 FROM debian:sid
@@ -29,10 +28,15 @@ RUN apt update && apt -y full-upgrade && \
     rclone openssh-client net-tools \
     nmap whois netcat-openbsd tcpdump \
     postgresql postgresql-client \
+    nodejs npm \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Remove screensavers
 RUN apt remove -y xscreensaver-data xscreensaver 2>/dev/null || true
+
+# Install code-server via npm
+RUN npm install -g code-server@latest 2>/dev/null \
+    || echo "[WARN] code-server npm install failed"
 
 # Setup hostname
 RUN hostname hf-server || echo 'failed to set hostname'
@@ -51,20 +55,7 @@ RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
     groupadd -f sudo && \
     usermod -aG sudo user
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Node.js + code-server
-# ─────────────────────────────────────────────────────────────────────────────
-RUN apt update && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
-    && apt install -y nodejs \
-    || (apt update && apt install -y nodejs npm) \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN npm install -g code-server@latest 2>/dev/null \
-    || echo "[WARN] code-server npm install failed"
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Startup scripts
-# ─────────────────────────────────────────────────────────────────────────────
 COPY scripts/ /app/scripts/
 RUN chmod +x /app/scripts/*.sh
 
