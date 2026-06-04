@@ -41,28 +41,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Try downloading KasmVNC — try multiple versions
-RUN KASMVNC_VER="1.3.2" \
-    && wget -q "https://github.com/kasmtech/KasmVNC/releases/download/v${KASMVNC_VER}/kasmvncserver_jammy_${KASMVNC_VER}_amd64.deb" \
-        -O /tmp/kasmvnc.deb 2>/dev/null \
-    && dpkg -i /tmp/kasmvnc.deb 2>/dev/null \
-    && apt-get install -f -y 2>/dev/null \
-    && echo "[OK] KasmVNC ${KASMVNC_VER} installed" \
-    || (echo "[WARN] KasmVNC ${KASMVNC_VER} failed, trying v1.3.1..." \
-        && rm -f /tmp/kasmvnc.deb \
-        && wget -q "https://github.com/kasmtech/KasmVNC/releases/download/v1.3.1/kasmvncserver_jammy_1.3.1_amd64.deb" \
-            -O /tmp/kasmvnc.deb 2>/dev/null \
-        && dpkg -i /tmp/kasmvnc.deb 2>/dev/null \
-        && apt-get install -f -y 2>/dev/null \
-        && echo "[OK] KasmVNC v1.3.1 installed" \
-    ) || (echo "[WARN] KasmVNC v1.3.1 also failed, trying v1.2.0..." \
-        && rm -f /tmp/kasmvnc.deb \
-        && wget -q "https://github.com/kasmtech/KasmVNC/releases/download/v1.2.0/kasmvncserver_jammy_1.2.0_amd64.deb" \
-            -O /tmp/kasmvnc.deb 2>/dev/null \
-        && dpkg -i /tmp/kasmvnc.deb 2>/dev/null \
-        && apt-get install -f -y 2>/dev/null \
-        && echo "[OK] KasmVNC v1.2.0 installed" \
-    ) || echo "[WARN] All KasmVNC versions failed, will try apt" \
+# Install KasmVNC v1.4.0 (latest, has jammy package)
+RUN wget -q "https://github.com/kasmtech/KasmVNC/releases/download/v1.4.0/kasmvncserver_jammy_1.4.0_amd64.deb" \
+        -O /tmp/kasmvnc.deb \
+    && apt-get update \
+    && apt-get install -y /tmp/kasmvnc.deb \
+    && echo "[OK] KasmVNC v1.4.0 installed" \
+    || echo "[WARN] KasmVNC v1.4.0 install failed" \
     && rm -f /tmp/kasmvnc.deb \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -120,7 +105,7 @@ RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends -t kali-rolling hydra \
     || echo "[WARN] hydra install failed" \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp*
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends -t kali-rolling john \
