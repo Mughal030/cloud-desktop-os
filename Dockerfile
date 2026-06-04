@@ -1,7 +1,7 @@
 # ============================================================================
-# Web Development Environment v12
-# Based on proven working HF Spaces template (kenken999/novnc-openbox-light)
+# Web Development Environment
 # Debian + XFCE4 + TigerVNC + noVNC on port 7860
+# Based on proven working HF Spaces template
 # ============================================================================
 
 FROM debian:sid
@@ -17,7 +17,7 @@ RUN useradd -d /home/user -s /bin/bash -m -u 1000 user && \
 # Set password for user
 RUN echo 'user:cloudos2024' | chpasswd && pwconv
 
-# Install desktop environment and remote access tools
+# Install desktop environment and development tools
 RUN apt update && apt -y full-upgrade && \
     apt install -y --no-install-recommends \
     vim bash xfce4-terminal xfce4 xfce4-whiskermenu-plugin \
@@ -27,6 +27,7 @@ RUN apt update && apt -y full-upgrade && \
     python3-websockify \
     xterm \
     rclone openssh-client net-tools \
+    nmap whois netcat-openbsd tcpdump \
     postgresql postgresql-client \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -51,76 +52,9 @@ RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
     usermod -aG sudo user
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Additional package repository (network analysis tools)
-# ─────────────────────────────────────────────────────────────────────────────
-RUN printf 'Package: *\nPin: release o=Kali\nPin-Priority: 50\n' \
-    > /etc/apt/preferences.d/extra-prefs
-
-RUN printf 'Package: openssl-provider-legacy\nPin: release *\nPin-Priority: -1\n' \
-    > /etc/apt/preferences.d/no-legacy-openssl
-
-RUN apt update && apt install -y --no-install-recommends gnupg \
-    && wget -qO- https://archive.kali.org/archive-key.asc \
-    | gpg --dearmor -o /usr/share/keyrings/kali-archive-keyring.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/kali-archive-keyring.gpg arch=amd64] \
-    http://http.kali.org/kali kali-rolling main contrib non-free" \
-    > /etc/apt/sources.list.d/extra.list \
-    && rm -rf /var/lib/apt/lists/*
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Network analysis and development tools
-# ─────────────────────────────────────────────────────────────────────────────
-RUN apt update && apt -y --fix-broken install 2>/dev/null; \
-    apt install -y --no-install-recommends -t kali-rolling nmap \
-    || echo "[WARN] nmap install failed" \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN apt update && apt -y --fix-broken install 2>/dev/null; \
-    apt install -y --no-install-recommends -t kali-rolling whois \
-    || echo "[WARN] whois install failed" \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN apt update && apt -y --fix-broken install 2>/dev/null; \
-    apt install -y --no-install-recommends -t kali-rolling sqlmap \
-    || echo "[WARN] sqlmap install failed" \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN apt update && apt -y --fix-broken install 2>/dev/null; \
-    apt install -y --no-install-recommends -t kali-rolling hydra \
-    || echo "[WARN] hydra install failed" \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN apt update && apt -y --fix-broken install 2>/dev/null; \
-    apt install -y --no-install-recommends -t kali-rolling john \
-    || echo "[WARN] john install failed" \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN apt update && apt -y --fix-broken install 2>/dev/null; \
-    apt install -y --no-install-recommends -t kali-rolling nikto \
-    || echo "[WARN] nikto install failed" \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN apt update && apt -y --fix-broken install 2>/dev/null; \
-    apt install -y --no-install-recommends -t kali-rolling dirb \
-    || echo "[WARN] dirb install failed" \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN apt update && apt -y --fix-broken install 2>/dev/null; \
-    apt install -y --no-install-recommends -t kali-rolling gobuster \
-    || echo "[WARN] gobuster install failed" \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN apt update && apt -y --fix-broken install 2>/dev/null; \
-    apt install -y --no-install-recommends \
-    netcat-openbsd tcpdump proxychains4 \
-    || echo "[WARN] Some network tools install failed" \
-    && rm -rf /var/lib/apt/lists/*
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Node.js + code-server
 # ─────────────────────────────────────────────────────────────────────────────
-RUN apt update && apt -y --fix-broken install 2>/dev/null; \
-    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+RUN apt update && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt install -y nodejs \
     || (apt update && apt install -y nodejs npm) \
     && rm -rf /var/lib/apt/lists/*
