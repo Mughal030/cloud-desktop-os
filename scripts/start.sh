@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================================
 # Web Development Environment — Startup Script
-# KasmVNC-based web workspace
+# KasmVNC-based web workspace (includes its own X server)
 # ============================================================================
 
 # No set -e — continue even if minor things fail
@@ -14,20 +14,17 @@ echo "============================================"
 # 1. Password Setup
 # ─────────────────────────────────────────────────────────────────────────────
 APP_PASSWORD="${APP_PASSWORD:-cloudos2024}"
-mkdir -p /root/.vnc /root/.kasmpasswd
+mkdir -p /root/.vnc
 
-if command -v vncserver &> /dev/null; then
-    echo "[INFO] KasmVNC detected — configuring..."
+# Set KasmVNC password
+if command -v kasmvncpasswd &> /dev/null; then
+    echo "$APP_PASSWORD" | kasmvncpasswd -u root -w - 2>/dev/null \
+        || echo "[WARN] kasmvncpasswd failed"
+fi
 
-    # Set KasmVNC password
-    if command -v kasmvncpasswd &> /dev/null; then
-        echo "$APP_PASSWORD" | kasmvncpasswd -u root -w - 2>/dev/null \
-            || echo "[WARN] kasmvncpasswd failed"
-    fi
-
-    # Create KasmVNC config
-    mkdir -p /root/.vnc
-    cat > /root/.vnc/kasmvnc.yaml << 'KASMEOF'
+# Create KasmVNC config file
+mkdir -p /root/.vnc
+cat > /root/.vnc/kasmvnc.yaml << KASMEOF
 network:
   protocol: http
   websocket_port: 7860
@@ -52,18 +49,20 @@ server:
   ipv6: false
 KASMEOF
 
-    # Set traditional password too
-    if command -v x11vnc &> /dev/null; then
-        x11vnc -storepasswd "$APP_PASSWORD" /root/.vnc/passwd 2>/dev/null || true
-    fi
+# Set the xstartup script for XFCE4
+mkdir -p /root/.vnc
+cat > /root/.vnc/xstartup.sh << 'XSTARTUP'
+#!/bin/bash
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+exec startxfce4
+XSTARTUP
+chmod +x /root/.vnc/xstartup.sh
 
-    echo "[OK] KasmVNC configured"
-else
-    echo "[WARN] KasmVNC not found"
-fi
+echo "[OK] KasmVNC configured"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. B2 Restore (if credentials provided)
+# 2. Cloud Storage Restore (if credentials provided)
 # ─────────────────────────────────────────────────────────────────────────────
 if [ -n "$B2_ACCOUNT_ID" ] && [ -n "$B2_ACCOUNT_KEY" ] && [ -n "$B2_BUCKET_NAME" ]; then
     echo "[INFO] Restoring data from cloud storage..."
@@ -104,17 +103,7 @@ if [ ! -L "/root/.config" ]; then
     fi
     ln -s "/root/persistent/.config" "/root/.config" 2>/dev/null || true
 fi
-if [ ! -L "/root/.msf4" ]; then
-    if [ -d "/root/.msf4" ]; then
-        cp -a "/root/.msf4/." "/root/persistent/.msf4/" 2>/dev/null || true
-        rm -rf "/root/.msf4" 2>/dev/null || true
-    fi
-    ln -s "/root/persistent/.msf4" "/root/.msf4" 2>/dev/null || true
-fi
 
-if [ ! -L "/root/.bashrc" ] && [ -f "/root/persistent/.bashrc" ]; then
-    cp "/root/persistent/.bashrc" "/root/.bashrc" 2>/dev/null || true
-fi
 echo "[OK] Persistent symlinks created"
 
 # ─────────────────────────────────────────────────────────────────────────────
