@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================================
 # Web Development Environment — Startup Script
-# KasmVNC-based web workspace (includes its own X server)
+# KasmVNC-based web workspace
 # ============================================================================
 
 # No set -e — continue even if minor things fail
@@ -11,23 +11,20 @@ echo "  Web Dev Environment — Starting Up"
 echo "============================================"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. Password Setup
+# 1. KasmVNC Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 APP_PASSWORD="${APP_PASSWORD:-cloudos2024}"
 mkdir -p /root/.vnc
 
-# Set KasmVNC password
-if command -v kasmvncpasswd &> /dev/null; then
-    echo "$APP_PASSWORD" | kasmvncpasswd -u root -w - 2>/dev/null \
-        || echo "[WARN] kasmvncpasswd failed"
-fi
-
-# Create KasmVNC config file
-mkdir -p /root/.vnc
-cat > /root/.vnc/kasmvnc.yaml << KASMEOF
+# Create KasmVNC YAML config — THIS IS THE KEY CONFIG
+# Port 7860 is required by Hugging Face Spaces
+cat > /root/.vnc/kasmvnc.yaml << 'KASMEOF'
 network:
   protocol: http
+  interface: 0.0.0.0
   websocket_port: 7860
+  use_ipv4: true
+  use_ipv6: false
   ssl:
     require_ssl: false
   udp:
@@ -49,17 +46,22 @@ server:
   ipv6: false
 KASMEOF
 
-# Set the xstartup script for XFCE4
-mkdir -p /root/.vnc
-cat > /root/.vnc/xstartup.sh << 'XSTARTUP'
-#!/bin/bash
-unset SESSION_MANAGER
-unset DBUS_SESSION_BUS_ADDRESS
-exec startxfce4
-XSTARTUP
-chmod +x /root/.vnc/xstartup.sh
+# Also create the system-level config
+mkdir -p /etc/kasmvnc 2>/dev/null
+cp /root/.vnc/kasmvnc.yaml /etc/kasmvnc/kasmvnc.yaml 2>/dev/null || true
 
-echo "[OK] KasmVNC configured"
+# Set KasmVNC user password using kasmvncpasswd
+if command -v kasmvncpasswd &> /dev/null; then
+    echo -e "$APP_PASSWORD\n$APP_PASSWORD" | kasmvncpasswd -u root -w 2>/dev/null \
+        || echo "[WARN] kasmvncpasswd failed, will use no-auth mode"
+fi
+
+# Also try vncpasswd
+if command -v vncpasswd &> /dev/null; then
+    echo -e "$APP_PASSWORD\n$APP_PASSWORD\nn" | vncpasswd 2>/dev/null || true
+fi
+
+echo "[OK] KasmVNC configured on port 7860"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. Cloud Storage Restore (if credentials provided)
@@ -95,7 +97,7 @@ for dir in Desktop Documents Downloads tools wordlists; do
     fi
 done
 
-mkdir -p "/root/persistent/.config" "/root/persistent/.msf4" 2>/dev/null || true
+mkdir -p "/root/persistent/.config" 2>/dev/null || true
 if [ ! -L "/root/.config" ]; then
     if [ -d "/root/.config" ]; then
         cp -a "/root/.config/." "/root/persistent/.config/" 2>/dev/null || true
