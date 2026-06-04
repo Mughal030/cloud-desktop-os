@@ -4,7 +4,8 @@
 # Xpra-based (no VNC) — Avoids HF Spaces abuse scanner
 # ============================================================================
 
-set -e
+# No set -e — we want the script to continue even if minor things fail
+# Errors are handled individually with || true
 
 echo "============================================"
 echo "  Cloud Desktop OS v5 — Starting Up"
