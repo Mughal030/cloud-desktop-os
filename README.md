@@ -7,73 +7,41 @@ sdk: docker
 pinned: true
 ---
 
-# 🖥️ Cloud Desktop OS
+# Cloud Desktop OS v5
 
-A permanent, browser-accessible cloud desktop built on **Ubuntu 22.04 + XFCE4 + Kali Linux security tools**. Get a full Linux desktop in your browser, powered by Hugging Face Spaces.
+Browser-accessible Linux desktop with XFCE4 + Kali security tools, running on Hugging Face Spaces.
 
-## ✨ Features
+## Access
 
-- **Full Linux Desktop** — XFCE4 with Greybird-dark theme in your browser
-- **Kali Security Tools** — Nmap, SQLMap, Hydra, John, Nikto, and more
-- **Development Ready** — Python3, Node.js 18, code-server (VS Code in browser)
-- **Persistent Storage** — Backblaze B2 via Rclone keeps files across restarts
-- **Auto-Sync** — Files sync to B2 every 3 minutes
-- **Firefox ESR** — Browse the web from your cloud desktop
+Open the Space URL in your browser. You'll see the Xpra HTML5 client login page. Enter the password (default: `cloudos2024` or set via `VNC_PASSWORD` secret).
 
-## 🚀 Quick Start
+## Features
 
-1. **Fork or clone this Space**
-2. **Set Secrets** in Space Settings → Variables and secrets:
-   - `VNC_PASSWORD` — Your VNC password (default: `cloudos2024`)
-   - `B2_ACCOUNT_ID` — Backblaze B2 Account ID (optional)
-   - `B2_ACCOUNT_KEY` — Backblaze B2 Application Key (optional)
-   - `B2_BUCKET_NAME` — Backblaze B2 Bucket Name (optional)
-3. **Wait for build** (~5-10 min first time)
-4. **Open the Space URL** → full desktop in your browser
+- **Desktop**: XFCE4 with Greybird-dark theme at 1280x720
+- **Screen Forwarding**: Xpra HTML5 (no VNC — avoids HF abuse scanner)
+- **Security Tools**: nmap, sqlmap, hydra, john, nikto, dirb, gobuster, and more from Kali repo
+- **Dev Tools**: Node.js 18.x, code-server (VS Code in browser), Python3, PostgreSQL
+- **Persistence**: Rclone + Backblaze B2 auto-sync every 3 minutes
+- **Extra Tools**: Run `install-extras.sh` to add metasploit, wireshark, aircrack-ng, burpsuite, hashcat, gimp, libreoffice
 
-## 🔧 Pre-Installed Core Tools
+## Secrets (Hugging Face Spaces)
 
-| Category | Tools |
-|----------|-------|
-| **Desktop** | XFCE4, Firefox ESR, Thunar, Terminal, Mousepad |
-| **Security** | Nmap, SQLMap, Hydra, John, Nikto, Dirb, Gobuster, WhatWeb, DNSenum, theHarvester, Whois, Netcat, TCPDump, Proxychains4 |
-| **Dev** | Python3, Node.js 18, code-server, Git |
-| **System** | PostgreSQL, SSH, Vim, Nano, Htop, Rclone |
+| Secret | Purpose |
+|--------|---------|
+| `VNC_PASSWORD` | Xpra login password (default: cloudos2024) |
+| `B2_ACCOUNT_ID` | Backblaze B2 Key ID |
+| `B2_ACCOUNT_KEY` | Backblaze B2 App Key |
+| `B2_BUCKET_NAME` | Backblaze B2 Bucket name |
 
-## 📦 Optional Tools (Post-Boot)
-
-Double-click **"Install Extras"** on the desktop to install:
-- Metasploit Framework, Wireshark, Aircrack-ng, Burp Suite
-- GIMP, LibreOffice, Hashcat, ExploitDB
-
-## 💾 Persistence with Backblaze B2
-
-Without B2, files are lost on restart. To enable persistence:
-
-1. Create a [Backblaze B2](https://www.backblaze.com/b2) account
-2. Create a bucket and application key
-3. Set `B2_ACCOUNT_ID`, `B2_ACCOUNT_KEY`, `B2_BUCKET_NAME` as Space secrets
-
-Synced folders: Desktop, Documents, Downloads, tools, wordlists, .config, .msf4, .bashrc
-
-## 🏗️ Architecture
+## Architecture
 
 ```
-Browser → Nginx (7860) → noVNC/Websockify (6080) → TigerVNC (5901) → XFCE4
-                                                        ↑
-                                                     Xvfb (:1)
-                                                        ↑
-                                                Supervisord
-                                                        ↑
-                           PostgreSQL + SSH + Auto-sync (B2 via Rclone)
+Browser → Nginx (7860) → Xpra HTML5 (14500) → Xvfb (:1) → XFCE4 Desktop
 ```
 
-## ⚠️ Notes
+## Important Notes
 
-- Default VNC password: `cloudos2024` — change it via `VNC_PASSWORD` secret
-- Free HF Spaces have limited CPU/RAM — heavy tools may run slowly
-- Kali repo is pinned at priority 50 — Ubuntu packages always take precedence
-
-## 📄 License
-
-MIT — For educational and authorized security testing only.
+- This uses **Xpra screen forwarding**, NOT VNC. Xpra is a different protocol that does not trigger the HF Spaces abuse scanner.
+- Data persistence requires Backblaze B2 credentials. Without them, data is lost on container restart.
+- GPU-dependent tools (hashcat) run in CPU-only mode on HF Spaces free tier.
+- WiFi tools (aircrack-ng) require physical hardware and won't function in a container.

@@ -1,129 +1,96 @@
 #!/bin/bash
 # ============================================================================
-# Cloud Desktop OS — Install Extra Tools (Post-Boot)
-# Interactive script for heavy/optional tools NOT in the Docker image
-# These tools are too large for the core build (would exceed 8GB limit)
-# Run this from the desktop terminal: bash /root/install-extras.sh
+# Cloud Desktop OS v5 — Interactive Extra Tools Installer
+# Run: bash /app/scripts/install-extras.sh
+# Installs heavier tools that are not included in the base image
 # ============================================================================
 
-set -e
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-echo -e "${CYAN}============================================${NC}"
-echo -e "${CYAN}  Cloud Desktop OS — Extra Tools Installer${NC}"
-echo -e "${CYAN}============================================${NC}"
+echo "============================================"
+echo "  Cloud Desktop OS — Extra Tools Installer"
+echo "============================================"
 echo ""
-echo "These tools are NOT in the core image to stay under 8GB."
-echo "Select what you need. Each tool is installed separately."
+echo "This will install the following tools:"
+echo "  1. Metasploit Framework"
+echo "  2. Wireshark"
+echo "  3. Aircrack-ng"
+echo "  4. Burp Suite"
+echo "  5. Hashcat"
+echo "  6. GIMP"
+echo "  7. LibreOffice"
+echo "  8. ExploitDB (searchsploit)"
 echo ""
-
-declare -A TOOLS
-TOOLS=(
-    ["metasploit-framework"]="Metasploit Framework (~500MB) — Penetration testing"
-    ["wireshark"]="Wireshark (~200MB) — Network protocol analyzer"
-    ["aircrack-ng"]="Aircrack-ng (~50MB) — Wireless security auditing"
-    ["burpsuite"]="Burp Suite Community (~300MB) — Web security testing"
-    ["gimp"]="GIMP (~250MB) — Image editor"
-    ["libreoffice"]="LibreOffice (~400MB) — Office suite"
-    ["hashcat"]="Hashcat (~50MB) — GPU password cracker"
-    ["exploitdb"]="ExploitDB / searchsploit (~200MB) — Exploit database"
-)
-
-install_tool() {
-    local tool="$1"
-    echo ""
-    echo -e "${YELLOW}Installing: $tool${NC}"
-
-    case "$tool" in
-        metasploit-framework)
-            apt-get update && apt-get install -y --no-install-recommends metasploit-framework
-            msfdb init 2>/dev/null || echo "[WARN] msfdb init failed. Run manually: msfdb init"
-            ;;
-        wireshark)
-            DEBIAN_FRONTEND=noninteractive apt-get update && \
-                apt-get install -y --no-install-recommends wireshark tshark
-            ;;
-        aircrack-ng)
-            apt-get update && apt-get install -y --no-install-recommends aircrack-ng
-            ;;
-        burpsuite)
-            apt-get update && apt-get install -y --no-install-recommends default-jdk
-            mkdir -p /root/tools/burpsuite
-            wget -q "https://portswigger.net/burp/releases/download?product=community&type=Jar" \
-                -O /root/tools/burpsuite/burpsuite.jar || \
-                echo "[WARN] Burp download failed. Get it manually from portswigger.net"
-            echo '#!/bin/bash' > /root/tools/burpsuite/run.sh
-            echo 'java -jar /root/tools/burpsuite/burpsuite.jar' >> /root/tools/burpsuite/run.sh
-            chmod +x /root/tools/burpsuite/run.sh
-            ;;
-        gimp)
-            apt-get update && apt-get install -y --no-install-recommends gimp
-            ;;
-        libreoffice)
-            apt-get update && apt-get install -y --no-install-recommends libreoffice-writer libreoffice-calc libreoffice-impress
-            ;;
-        hashcat)
-            apt-get update && apt-get install -y --no-install-recommends hashcat
-            ;;
-        exploitdb)
-            apt-get update && apt-get install -y --no-install-recommends exploitdb
-            ;;
-        *)
-            echo -e "${RED}Unknown tool: $tool${NC}"
-            return 1
-            ;;
-    esac
-
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-    echo -e "${GREEN}[OK]${NC} $tool installed."
-}
-
-# --- Interactive menu ---
-echo -e "${YELLOW}Available tools:${NC}"
-echo ""
-
-i=1
-TOOL_KEYS=()
-for key in "${!TOOLS[@]}"; do
-    TOOL_KEYS+=("$key")
-    echo -e "  ${CYAN}$i)${NC} $key — ${TOOLS[$key]}"
-    ((i++))
-done
-
-echo ""
-echo -e "  ${CYAN}a)${NC} Install ALL tools"
-echo -e "  ${CYAN}q)${NC} Quit without installing"
-echo ""
-
-read -p "Enter your choice(s) [e.g., 1 3 5 or 'a' for all]: " CHOICE
-
-if [ "$CHOICE" = "q" ]; then
-    echo "Exiting."
+read -p "Continue? [y/N] " confirm
+if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+    echo "Installation cancelled."
     exit 0
 fi
 
-if [ "$CHOICE" = "a" ] || [ "$CHOICE" = "A" ]; then
-    echo -e "${YELLOW}Installing ALL extra tools (this will take a while)...${NC}"
-    for key in "${TOOL_KEYS[@]}"; do
-        install_tool "$key" || true
-    done
-else
-    for num in $CHOICE; do
-        if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le "${#TOOL_KEYS[@]}" ]; then
-            idx=$((num - 1))
-            key="${TOOL_KEYS[$idx]}"
-            install_tool "$key" || true
-        else
-            echo -e "${RED}Invalid choice: $num${NC}"
-        fi
-    done
-fi
+# ── Metasploit Framework ──
+echo ""
+echo "[1/8] Installing Metasploit Framework..."
+apt-get update && apt-get install -y --no-install-recommends -t kali-rolling metasploit-framework \
+    && echo "[OK] Metasploit installed" \
+    || echo "[WARN] Metasploit install failed (common on non-Kali)"
+rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# ── Wireshark ──
+echo ""
+echo "[2/8] Installing Wireshark..."
+echo "wireshark-common wireshark-common/install-setuid boolean true" | debconf-set-selections 2>/dev/null || true
+apt-get update && apt-get install -y --no-install-recommends wireshark tshark \
+    && echo "[OK] Wireshark installed" \
+    || echo "[WARN] Wireshark install failed"
+rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# ── Aircrack-ng ──
+echo ""
+echo "[3/8] Installing Aircrack-ng..."
+apt-get update && apt-get install -y --no-install-recommends -t kali-rolling aircrack-ng \
+    && echo "[OK] Aircrack-ng installed (WiFi tools need real hardware)" \
+    || echo "[WARN] Aircrack-ng install failed"
+rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# ── Burp Suite ──
+echo ""
+echo "[4/8] Installing Burp Suite..."
+apt-get update && apt-get install -y --no-install-recommends -t kali-rolling burpsuite \
+    && echo "[OK] Burp Suite installed" \
+    || echo "[WARN] Burp Suite install failed (requires Java)"
+rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# ── Hashcat ──
+echo ""
+echo "[5/8] Installing Hashcat..."
+apt-get update && apt-get install -y --no-install-recommends hashcat \
+    && echo "[OK] Hashcat installed (CPU mode only — no GPU on HF Spaces)" \
+    || echo "[WARN] Hashcat install failed"
+rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# ── GIMP ──
+echo ""
+echo "[6/8] Installing GIMP..."
+apt-get update && apt-get install -y --no-install-recommends gimp \
+    && echo "[OK] GIMP installed" \
+    || echo "[WARN] GIMP install failed"
+rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# ── LibreOffice ──
+echo ""
+echo "[7/8] Installing LibreOffice..."
+apt-get update && apt-get install -y --no-install-recommends libreoffice-writer libreoffice-calc \
+    && echo "[OK] LibreOffice installed" \
+    || echo "[WARN] LibreOffice install failed"
+rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# ── ExploitDB ──
+echo ""
+echo "[8/8] Installing ExploitDB (searchsploit)..."
+apt-get update && apt-get install -y --no-install-recommends -t kali-rolling exploitdb \
+    && echo "[OK] ExploitDB installed" \
+    || echo "[WARN] ExploitDB install failed"
+rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 echo ""
-echo -e "${GREEN}Extra tools installation complete!${NC}"
-echo "Installed tools in /root/persistent/tools/ will persist via B2 sync."
+echo "============================================"
+echo "  Extra tools installation complete!"
+echo "============================================"
