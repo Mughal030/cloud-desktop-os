@@ -76,39 +76,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ===========================================================================
-# Layer 4: Kali Linux repo — pinned safe with apt preferences
+# Layer 4: Security tools (ALL from Ubuntu 22.04 universe repo)
+# NO Kali Linux repository — it breaks Ubuntu base with dependency conflicts
+# All these tools are available in Ubuntu's own universe repository
 # ===========================================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nmap whois dnsenum theharvester sqlmap hydra john nikto \
+    dirb gobuster whatweb netcat-openbsd tcpdump proxychains4 \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* || \
+    echo "[WARN] Some security tools may not have installed"
 
-# Pin Kali packages at priority 50 so they never override Ubuntu packages
-RUN mkdir -p /etc/apt/preferences.d && \
-    printf 'Package: *\nPin: release o=Kali\nPin-Priority: 50\n' \
-    > /etc/apt/preferences.d/kali-prefs
-
-# Add Kali repo with proper GPG key handling (binary .gpg format required)
-RUN mkdir -p /usr/share/keyrings && \
-    wget -qO- https://archive.kali.org/archive-key.asc | \
-    gpg --dearmor -o /usr/share/keyrings/kali-archive-keyring.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/kali-archive-keyring.gpg] http://http.kali.org/kali kali-rolling main contrib non-free" \
-    > /etc/apt/sources.list.d/kali.list
-
-# Install Kali security tools — each with fallback to Ubuntu repo
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends -t kali-rolling nmap 2>/dev/null || apt-get install -y --no-install-recommends nmap || true && \
-    apt-get install -y --no-install-recommends -t kali-rolling whois 2>/dev/null || apt-get install -y --no-install-recommends whois || true && \
-    apt-get install -y --no-install-recommends -t kali-rolling dnsenum 2>/dev/null || apt-get install -y --no-install-recommends dnsenum || true && \
-    apt-get install -y --no-install-recommends -t kali-rolling theharvester 2>/dev/null || apt-get install -y --no-install-recommends theharvester || true && \
-    apt-get install -y --no-install-recommends -t kali-rolling sqlmap 2>/dev/null || apt-get install -y --no-install-recommends sqlmap || true && \
-    apt-get install -y --no-install-recommends -t kali-rolling hydra 2>/dev/null || apt-get install -y --no-install-recommends hydra || true && \
-    apt-get install -y --no-install-recommends -t kali-rolling john 2>/dev/null || apt-get install -y --no-install-recommends john || true && \
-    apt-get install -y --no-install-recommends -t kali-rolling nikto 2>/dev/null || apt-get install -y --no-install-recommends nikto || true && \
-    apt-get install -y --no-install-recommends -t kali-rolling dirb 2>/dev/null || apt-get install -y --no-install-recommends dirb || true && \
-    apt-get install -y --no-install-recommends -t kali-rolling gobuster 2>/dev/null || apt-get install -y --no-install-recommends gobuster || true && \
-    apt-get install -y --no-install-recommends -t kali-rolling whatweb 2>/dev/null || apt-get install -y --no-install-recommends whatweb || true && \
-    apt-get install -y --no-install-recommends -t kali-rolling wordlists 2>/dev/null || apt-get install -y --no-install-recommends wordlists || true && \
-    apt-get install -y --no-install-recommends -t kali-rolling netcat-openbsd 2>/dev/null || apt-get install -y --no-install-recommends netcat-openbsd || true && \
-    apt-get install -y --no-install-recommends -t kali-rolling tcpdump 2>/dev/null || apt-get install -y --no-install-recommends tcpdump || true && \
-    apt-get install -y --no-install-recommends -t kali-rolling proxychains4 2>/dev/null || apt-get install -y --no-install-recommends proxychains4 || true && \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+# Wordlists (separate layer — large package)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wordlists || echo "[WARN] wordlists not found, skipped" \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ===========================================================================
 # Layer 5: Development tools
