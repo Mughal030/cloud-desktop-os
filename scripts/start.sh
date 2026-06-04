@@ -1,70 +1,16 @@
 #!/bin/bash
 # ============================================================================
-# Web Development Environment — Startup Script
-# KasmVNC-based web workspace
+# Web Development Environment v10 — Startup Script
+# Based on linuxserver/webtop — KasmVNC is pre-configured
+# This script just handles our custom additions (persistence, DB, etc.)
 # ============================================================================
 
-# No set -e — continue even if minor things fail
-
 echo "============================================"
-echo "  Web Dev Environment — Starting Up"
+echo "  Web Dev Environment — Custom Init"
 echo "============================================"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. KasmVNC Configuration
-# ─────────────────────────────────────────────────────────────────────────────
-APP_PASSWORD="${APP_PASSWORD:-cloudos2024}"
-mkdir -p /root/.vnc
-
-# Create KasmVNC YAML config — THIS IS THE KEY CONFIG
-# Port 7860 is required by Hugging Face Spaces
-cat > /root/.vnc/kasmvnc.yaml << 'KASMEOF'
-network:
-  protocol: http
-  interface: 0.0.0.0
-  websocket_port: 7860
-  use_ipv4: true
-  use_ipv6: false
-  ssl:
-    require_ssl: false
-  udp:
-    public_ip: auto
-desktop:
-  resolution:
-    width: 1280
-    height: 720
-  allow_resize: true
-encoding:
-  max_frame_rate: 30
-  video_encoding:
-    video_encoding_mode: always
-security:
-  brute_force_protection:
-    blacklist_threshold: 5
-    blacklist_timeout: 10
-server:
-  ipv6: false
-KASMEOF
-
-# Also create the system-level config
-mkdir -p /etc/kasmvnc 2>/dev/null
-cp /root/.vnc/kasmvnc.yaml /etc/kasmvnc/kasmvnc.yaml 2>/dev/null || true
-
-# Set KasmVNC user password using kasmvncpasswd
-if command -v kasmvncpasswd &> /dev/null; then
-    echo -e "$APP_PASSWORD\n$APP_PASSWORD" | kasmvncpasswd -u root -w 2>/dev/null \
-        || echo "[WARN] kasmvncpasswd failed, will use no-auth mode"
-fi
-
-# Also try vncpasswd
-if command -v vncpasswd &> /dev/null; then
-    echo -e "$APP_PASSWORD\n$APP_PASSWORD\nn" | vncpasswd 2>/dev/null || true
-fi
-
-echo "[OK] KasmVNC configured on port 7860"
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 2. Cloud Storage Restore (if credentials provided)
+# 1. Cloud Storage Restore (if credentials provided)
 # ─────────────────────────────────────────────────────────────────────────────
 if [ -n "$B2_ACCOUNT_ID" ] && [ -n "$B2_ACCOUNT_KEY" ] && [ -n "$B2_BUCKET_NAME" ]; then
     echo "[INFO] Restoring data from cloud storage..."
@@ -77,16 +23,15 @@ if [ -n "$B2_ACCOUNT_ID" ] && [ -n "$B2_ACCOUNT_KEY" ] && [ -n "$B2_BUCKET_NAME"
         --retries=3 \
         :b2:"$B2_BUCKET_NAME" /root/persistent/ \
     && echo "[OK] Cloud restore complete" \
-    || echo "[WARN] Cloud restore failed, continuing with empty dir"
+    || echo "[WARN] Cloud restore failed"
 else
-    echo "[INFO] Cloud credentials not set, skipping restore"
     mkdir -p /root/persistent
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3. Create Symlinks for Persistent Directories
+# 2. Create Symlinks for Persistent Directories
 # ─────────────────────────────────────────────────────────────────────────────
-for dir in Desktop Documents Downloads tools wordlists; do
+for dir in tools wordlists; do
     mkdir -p "/root/persistent/$dir" 2>/dev/null || true
     if [ ! -L "/root/$dir" ] && [ ! -d "/root/$dir" ]; then
         ln -s "/root/persistent/$dir" "/root/$dir" 2>/dev/null || true
@@ -97,19 +42,10 @@ for dir in Desktop Documents Downloads tools wordlists; do
     fi
 done
 
-mkdir -p "/root/persistent/.config" 2>/dev/null || true
-if [ ! -L "/root/.config" ]; then
-    if [ -d "/root/.config" ]; then
-        cp -a "/root/.config/." "/root/persistent/.config/" 2>/dev/null || true
-        rm -rf "/root/.config" 2>/dev/null || true
-    fi
-    ln -s "/root/persistent/.config" "/root/.config" 2>/dev/null || true
-fi
-
 echo "[OK] Persistent symlinks created"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4. PostgreSQL Dynamic Version Detection
+# 3. PostgreSQL Dynamic Version Detection
 # ─────────────────────────────────────────────────────────────────────────────
 PG_VERSION=$(ls /etc/postgresql/ 2>/dev/null | head -1)
 if [ -n "$PG_VERSION" ]; then
@@ -125,31 +61,13 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. XFCE4 Theme Configuration
-# ─────────────────────────────────────────────────────────────────────────────
-mkdir -p /root/.config/xfce4/xfconf/xfce-perchannel-xml/ 2>/dev/null || true
-
-cat > /root/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml << 'XMLEOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<channel name="xsettings" version="1.0">
-  <property name="Net" type="empty">
-    <property name="ThemeName" type="string" value="Greybird-dark"/>
-    <property name="IconThemeName" type="string" value="elementary-xfce-dark"/>
-  </property>
-  <property name="Gtk" type="empty">
-    <property name="FontName" type="string" value="Sans 10"/>
-  </property>
-</channel>
-XMLEOF
-
-echo "[OK] XFCE4 theme configured"
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 6. Desktop Icons
+# 4. Desktop Icons
 # ─────────────────────────────────────────────────────────────────────────────
 mkdir -p /root/Desktop 2>/dev/null || true
+mkdir -p /config/Desktop 2>/dev/null || true
 
-cat > /root/Desktop/terminal.desktop << 'DEOF'
+for DESKTOP_DIR in /root/Desktop /config/Desktop; do
+    cat > "$DESKTOP_DIR/terminal.desktop" << 'DEOF'
 [Desktop Entry]
 Name=Terminal
 Comment=XFCE Terminal
@@ -159,17 +77,7 @@ Terminal=false
 Type=Application
 DEOF
 
-cat > /root/Desktop/files.desktop << 'DEOF'
-[Desktop Entry]
-Name=Files
-Comment=Thunar File Manager
-Exec=thunar
-Icon=system-file-manager
-Terminal=false
-Type=Application
-DEOF
-
-cat > /root/Desktop/vscode.desktop << 'DEOF'
+    cat > "$DESKTOP_DIR/vscode.desktop" << 'DEOF'
 [Desktop Entry]
 Name=VS Code
 Comment=Code Server
@@ -179,14 +87,17 @@ Terminal=true
 Type=Application
 DEOF
 
-chmod +x /root/Desktop/*.desktop 2>/dev/null || true
+    chmod +x "$DESKTOP_DIR"/*.desktop 2>/dev/null || true
+done
+
 echo "[OK] Desktop icons created"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 7. .bashrc Additions
+# 5. .bashrc Additions
 # ─────────────────────────────────────────────────────────────────────────────
-if ! grep -q "# Web Dev Environment" /root/.bashrc 2>/dev/null; then
-    cat >> /root/.bashrc << 'BASHEOF'
+for BASHRC in /root/.bashrc /config/.bashrc; do
+    if [ -f "$BASHRC" ] && ! grep -q "# Web Dev Environment" "$BASHRC" 2>/dev/null; then
+        cat >> "$BASHRC" << 'BASHEOF'
 
 # Web Dev Environment
 export PATH="$PATH:/usr/local/bin"
@@ -194,9 +105,10 @@ alias ll='ls -la'
 alias update='apt-get update && apt-get upgrade -y'
 alias install-extras='bash /app/scripts/install-extras.sh'
 BASHEOF
-fi
+    fi
+done
 
 echo "[OK] .bashrc configured"
 echo "============================================"
-echo "  Startup complete — Supervisord taking over"
+echo "  Custom init complete"
 echo "============================================"

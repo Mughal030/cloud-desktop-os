@@ -1,74 +1,70 @@
 # ============================================================================
-# Web Development Environment v9
-# Ubuntu 22.04 + XFCE4 + KasmVNC + Dev Tools
-# KasmVNC creates its own virtual display — no Xvfb needed
-# Architecture: Browser → KasmVNC (7860) → Xvnc → XFCE4 Desktop
+# Web Development Environment v10
+# Based on linuxserver/webtop — proven KasmVNC + XFCE4 setup
+# Adds: network analysis tools, Node.js, code-server, PostgreSQL, rclone
+# Port: 7860 (proxied via nginx from linuxserver's 3000)
 # ============================================================================
 
-FROM ubuntu:22.04
+FROM lscr.io/linuxserver/webtop:ubuntu-xfce
 
-ENV DEBIAN_FRONTEND=noninteractive
+# linuxserver/webtop runs on port 3000 (HTTP) and 3001 (HTTPS)
+# HF Spaces needs port 7860
+# We add nginx to proxy 7860 → 3000
+
+ENV PUID=0
+ENV PGID=0
 ENV TZ=UTC
-ENV HOME=/root
+ENV CUSTOM_USER=root
+ENV PASSWORD=cloudos2024
+ENV TITLE="Web Dev Environment"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Layer 1: System base packages
+# Layer 1: Install nginx for port proxy + additional system packages
 # ─────────────────────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    nginx \
     sudo curl wget git unzip vim nano htop \
     ca-certificates gnupg lsb-release software-properties-common \
-    apt-transport-https supervisor \
-    rclone openssh-client net-tools dbus-x11 x11-utils \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Layer 2: Desktop environment — XFCE4 (lightweight)
-# ─────────────────────────────────────────────────────────────────────────────
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    xfce4 xfce4-terminal xfce4-whiskermenu-plugin \
-    thunar mousepad greybird-gtk-theme gtk2-engines-murrine \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Layer 3: KasmVNC — web-based remote access
-# KasmVNC includes its own Xvnc display server (no separate Xvfb needed)
-# Download from GitHub releases for Ubuntu 22.04 (jammy)
-# ─────────────────────────────────────────────────────────────────────────────
-# Install KasmVNC dependencies first
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libxfont2 libxdamage1 libxrandr2 libxcomposite1 libxshmfence1 \
-    libgomp1 libjpeg-turbo8 libpulse0 libssl3 libssl-dev \
-    python3 python3-pip \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# Install KasmVNC v1.4.0 (latest, has jammy package)
-RUN wget -q "https://github.com/kasmtech/KasmVNC/releases/download/v1.4.0/kasmvncserver_jammy_1.4.0_amd64.deb" \
-        -O /tmp/kasmvnc.deb \
-    && apt-get update \
-    && apt-get install -y /tmp/kasmvnc.deb \
-    && echo "[OK] KasmVNC v1.4.0 installed" \
-    || echo "[WARN] KasmVNC v1.4.0 install failed" \
-    && rm -f /tmp/kasmvnc.deb \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# Verify KasmVNC and check its version
-RUN if command -v vncserver &> /dev/null; then \
-        echo "[OK] KasmVNC installed: $(vncserver -version 2>&1 | head -1)"; \
-    else \
-        echo "[WARN] KasmVNC not found via vncserver command"; \
-        ls -la /usr/bin/vnc* 2>/dev/null || echo "No vnc binaries found"; \
-        ls -la /usr/bin/kasm* 2>/dev/null || echo "No kasm binaries found"; \
-    fi
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Layer 4: PostgreSQL
-# ─────────────────────────────────────────────────────────────────────────────
-RUN apt-get update && apt-get install -y --no-install-recommends \
+    apt-transport-https \
+    rclone openssh-client net-tools \
     postgresql postgresql-client \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Layer 5: Additional package repository (network tools)
+# Layer 2: Configure nginx to proxy 7860 → 3000
+# ─────────────────────────────────────────────────────────────────────────────
+RUN echo 'worker_processes 1;\n\
+pid /run/nginx-proxy.pid;\n\
+error_log /var/log/nginx/error.log warn;\n\
+\n\
+events {\n\
+    worker_connections 1024;\n\
+}\n\
+\n\
+http {\n\
+    sendfile on;\n\
+    keepalive_timeout 65;\n\
+\n\
+    server {\n\
+        listen 7860;\n\
+        server_name _;\n\
+\n\
+        location / {\n\
+            proxy_pass http://127.0.0.1:3000;\n\
+            proxy_http_version 1.1;\n\
+            proxy_set_header Upgrade $http_upgrade;\n\
+            proxy_set_header Connection "upgrade";\n\
+            proxy_set_header Host $host;\n\
+            proxy_set_header X-Real-IP $remote_addr;\n\
+            proxy_read_timeout 86400s;\n\
+            proxy_send_timeout 86400s;\n\
+            proxy_buffering off;\n\
+        }\n\
+    }\n\
+}' > /etc/nginx/nginx-proxy.conf
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Layer 3: Additional package repository (network tools)
 # Pin priority 50 — only installs when explicitly requested
 # ─────────────────────────────────────────────────────────────────────────────
 RUN printf 'Package: *\nPin: release o=Kali\nPin-Priority: 50\n' \
@@ -84,7 +80,7 @@ RUN wget -qO- https://archive.kali.org/archive-key.asc \
     > /etc/apt/sources.list.d/extra.list
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Layer 6: Network analysis tools
+# Layer 4: Network analysis tools
 # Each in own RUN with fallback
 # ─────────────────────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
@@ -154,7 +150,7 @@ RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Layer 7: Node.js + code-server
+# Layer 5: Node.js + code-server
 # ─────────────────────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
@@ -167,15 +163,38 @@ RUN npm install -g code-server@latest 2>/dev/null \
     || echo "[WARN] code-server npm install failed"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Layer 8: Configuration files and startup
+# Layer 6: Startup scripts
 # ─────────────────────────────────────────────────────────────────────────────
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY scripts/ /app/scripts/
 RUN chmod +x /app/scripts/*.sh
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Layer 7: s6-overlay init — add nginx proxy and our startup script
+# linuxserver/webtop uses s6-overlay for service management
+# We add our services as s6-overlay init scripts
+# ─────────────────────────────────────────────────────────────────────────────
+# Add nginx proxy as an s6 service
+RUN mkdir -p /etc/s6-overlay/s6-rc.d/nginx-proxy
+RUN printf '#!/command/with-contenv bash\nexec nginx -c /etc/nginx/nginx-proxy.conf -g "daemon off;"\n' \
+    > /etc/s6-overlay/s6-rc.d/nginx-proxy/run \
+    && chmod +x /etc/s6-overlay/s6-rc.d/nginx-proxy/run
+RUN printf '3\n' > /etc/s6-overlay/s6-rc.d/nginx-proxy/notification-fd
+RUN touch /etc/s6-overlay/s6-rc.d/nginx-proxy/down
+
+# Create the bundle that enables nginx-proxy
+RUN mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d/nginx-proxy
+
+# Add our custom startup script
+RUN mkdir -p /etc/s6-overlay/s6-rc.d/custom-init
+RUN printf '#!/command/with-contenv bash\n/app/scripts/start.sh\n' \
+    > /etc/s6-overlay/s6-rc.d/custom-init/run \
+    && chmod +x /etc/s6-overlay/s6-rc.d/custom-init/run
+RUN printf '3\n' > /etc/s6-overlay/s6-rc.d/custom-init/notification-fd
+RUN touch /etc/s6-overlay/s6-rc.d/custom-init/down
+RUN mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d/custom-init
+
 # Create app directories
-RUN mkdir -p /root/persistent /run/postgresql /root/.vnc
+RUN mkdir -p /root/persistent /run/postgresql
 
+# Expose HF-required port
 EXPOSE 7860
-
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
