@@ -19,13 +19,13 @@ cp /etc/kasmvnc/kasmvnc.yaml /root/.vnc/kasmvnc.yaml 2>/dev/null || true
 
 # Set KasmVNC password using kasmvncpasswd
 if command -v kasmvncpasswd &> /dev/null; then
-    echo -e "$APP_PASSWORD\n$APP_PASSWORD" | kasmvncpasswd -u root -w 2>/dev/null \
-        || echo "[WARN] kasmvncpasswd failed — will use no-password mode"
-fi
-
-# Also try vncpasswd for the display password
-if command -v vncpasswd &> /dev/null; then
-    echo -e "$APP_PASSWORD\n$APP_PASSWORD\nn" | vncpasswd 2>/dev/null || true
+    echo -e "$APP_PASSWORD\n$APP_PASSWORD" | kasmvncpasswd -u root -w 2>&1 \
+        && echo "[OK] kasmvncpasswd set password for root" \
+        || echo "[WARN] kasmvncpasswd failed"
+elif command -v vncpasswd &> /dev/null; then
+    echo -e "$APP_PASSWORD\n$APP_PASSWORD\nn" | vncpasswd 2>/dev/null \
+        && echo "[OK] vncpasswd set" \
+        || echo "[WARN] vncpasswd failed"
 fi
 
 echo "[OK] KasmVNC password configured"
