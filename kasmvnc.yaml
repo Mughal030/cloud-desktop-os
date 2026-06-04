@@ -1,0 +1,25 @@
+network:
+  protocol: http
+  interface: 0.0.0.0
+  websocket_port: 7860
+  use_ipv4: true
+  use_ipv6: false
+  ssl:
+    require_ssl: false
+  udp:
+    public_ip: auto
+desktop:
+  resolution:
+    width: 1280
+    height: 720
+  allow_resize: true
+encoding:
+  max_frame_rate: 30
+  video_encoding:
+    video_encoding_mode: always
+security:
+  brute_force_protection:
+    blacklist_threshold: 5
+    blacklist_timeout: 10
+server:
+  ipv6: false
