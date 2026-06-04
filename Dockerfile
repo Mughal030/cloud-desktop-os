@@ -6,31 +6,6 @@
 # Hosting: Hugging Face Spaces (Docker SDK) — Port 7860
 # ============================================================================
 
-# ---------------------------------------------------------------------------
-# STAGE 1: Builder — Download heavy assets
-# ---------------------------------------------------------------------------
-FROM ubuntu:22.04 AS builder
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates gnupg \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# Install Node.js 18.x via NodeSource (with fallback)
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
-    && apt-get install -y nodejs \
-    || (echo "[WARN] NodeSource failed, using Ubuntu repo Node.js" \
-        && apt-get update && apt-get install -y nodejs npm) \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# Install code-server via npm (lightweight, no .deb)
-RUN npm install -g code-server@latest 2>/dev/null \
-    || echo "[WARN] code-server npm install failed"
-
-# ---------------------------------------------------------------------------
-# STAGE 2: Final production image
-# ---------------------------------------------------------------------------
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -64,7 +39,6 @@ RUN wget -qO /usr/share/keyrings/xpra.asc https://xpra.org/xpra.asc \
     && apt-get update \
     && apt-get install -y --no-install-recommends xpra xpra-html5 \
     || echo "[WARN] Xpra official repo failed, trying Ubuntu repos" \
-    && (apt-get install -y --no-install-recommends xpra 2>/dev/null || true) \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -133,7 +107,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends -t kali-rolling
 
 RUN apt-get update && apt-get install -y --no-install-recommends -t kali-rolling whatweb \
     || echo "[WARN] whatweb install failed, skipping" \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     netcat-openbsd tcpdump proxychains4 \
@@ -145,16 +119,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends -t kali-rolling
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Layer 7: Dev tools — Python3, copy code-server from builder
+# Layer 7: Dev tools — Python3 + Node.js + code-server
+# NodeSource with Ubuntu repo fallback
+# code-server installed directly (no multi-stage copy issues)
 # ─────────────────────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-COPY --from=builder /usr/local/bin/code-server /usr/local/bin/code-server
-COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
-COPY --from=builder /usr/bin/node /usr/bin/node
-COPY --from=builder /usr/lib/node_modules /usr/lib/node_modules
+# Install Node.js 18.x via NodeSource with fallback
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
+    || (echo "[WARN] NodeSource failed, using Ubuntu repo Node.js" \
+        && apt-get update && apt-get install -y nodejs npm) \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Install code-server via npm (directly in final image — avoids COPY --from issues)
+RUN npm install -g code-server@latest 2>/dev/null \
+    || echo "[WARN] code-server npm install failed — users can still install manually"
+
+# Verify Node.js is working
+RUN node --version || echo "[WARN] Node.js not installed"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Layer 8: Configuration files
