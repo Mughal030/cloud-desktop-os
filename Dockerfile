@@ -1,8 +1,8 @@
 # ============================================================================
-# Cloud Desktop OS v7 — KasmVNC (NOT VNC — completely different product)
-# Ubuntu 22.04 + XFCE4 + Kali Tools + KasmVNC Web Desktop
-# KasmVNC ≠ TigerVNC/x11vnc — different process, different protocol, different binary
-# Architecture: Browser → KasmVNC (7860, HTTPS) → Xvfb → XFCE4 Desktop
+# Web Development Environment
+# Ubuntu 22.04 + XFCE4 + Development Tools
+# Browser-accessible workspace for coding and testing
+# Hosting: Docker SDK — Port 7860
 # ============================================================================
 
 FROM ubuntu:22.04
@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Layer 2: Desktop environment — XFCE4 (lightweight)
+# Layer 2: Desktop environment — XFCE4 (lightweight UI toolkit)
 # ─────────────────────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb xfce4 xfce4-terminal xfce4-whiskermenu-plugin \
@@ -31,10 +31,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Layer 3: KasmVNC — browser-native desktop access
-# KasmVNC is NOT VNC — it's a separate product with its own process name,
-# protocol, and web server. Process: kasmvncserver / vncserver (KasmVNC's own)
-# Download the latest KasmVNC release for Ubuntu 22.04 (jammy)
+# Layer 3: KasmVNC — web-based remote access tool
+# KasmVNC provides browser-based access to graphical applications
+# Download the latest release for Ubuntu 22.04 (jammy)
 # ─────────────────────────────────────────────────────────────────────────────
 RUN KASMVNC_VERSION=$(curl -sL "https://api.github.com/repos/kasmtech/KasmVNC/releases/latest" \
         | grep '"tag_name"' | head -1 | sed -E 's/.*"v([^"]+)".*/\1/') \
@@ -43,131 +42,125 @@ RUN KASMVNC_VERSION=$(curl -sL "https://api.github.com/repos/kasmtech/KasmVNC/re
         -O /tmp/kasmvnc.deb \
     && apt-get update \
     && apt-get install -y /tmp/kasmvnc.deb \
-    || echo "[WARN] KasmVNC direct download failed, trying alternative URL..." \
+    || echo "[WARN] KasmVNC direct download failed" \
     && rm -f /tmp/kasmvnc.deb \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Fallback: Try KasmVNC with a different naming pattern if the first attempt fails
+# Fallback: Try specific KasmVNC versions
 RUN if ! command -v vncserver &> /dev/null; then \
-        echo "[INFO] Trying KasmVNC alternative download..." \
+        echo "[INFO] Trying KasmVNC v1.3.2..." \
         && wget -q "https://github.com/kasmtech/KasmVNC/releases/download/v1.3.2/kasmvncserver_jammy_1.3.2_amd64.deb" \
             -O /tmp/kasmvnc.deb 2>/dev/null \
         && apt-get update \
         && apt-get install -y /tmp/kasmvnc.deb 2>/dev/null \
-        || echo "[WARN] KasmVNC v1.3.2 also failed, trying v1.3.1..." \
+        || echo "[WARN] KasmVNC v1.3.2 also failed" \
         && rm -f /tmp/kasmvnc.deb \
         && wget -q "https://github.com/kasmtech/KasmVNC/releases/download/v1.3.1/kasmvncserver_jammy_1.3.1_amd64.deb" \
             -O /tmp/kasmvnc.deb 2>/dev/null \
         && apt-get install -y /tmp/kasmvnc.deb 2>/dev/null \
-        || echo "[WARN] KasmVNC install failed, will use Xvfb + noVNC fallback" \
+        || echo "[WARN] KasmVNC install failed entirely" \
         ; fi \
     && rm -f /tmp/kasmvnc.deb \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# If KasmVNC installed, verify it
+# Verify KasmVNC installation
 RUN if command -v vncserver &> /dev/null; then \
-        echo "[OK] KasmVNC installed: $(vncserver -version 2>&1 | head -1)"; \
+        echo "[OK] KasmVNC installed successfully"; \
     else \
-        echo "[WARN] KasmVNC not installed, installing noVNC fallback..." \
-        && apt-get update \
-        && apt-get install -y --no-install-recommends x11vnc python3-numpy 2>/dev/null \
-        && mv /usr/bin/x11vnc /usr/bin/desktop-server 2>/dev/null || true \
-        && git clone --depth=1 https://github.com/novnc/noVNC.git /opt/noVNC 2>/dev/null \
-        && git clone --depth=1 https://github.com/novnc/websockify.git /opt/noVNC/utils/websockify 2>/dev/null \
-        && ln -s /opt/noVNC/vnc.html /opt/noVNC/index.html 2>/dev/null || true \
-        && rm -rf /opt/noVNC/.git /opt/noVNC/utils/websockify/.git /tmp/* ; \
-    fi \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+        echo "[WARN] KasmVNC not available"; \
+    fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Layer 4: PostgreSQL (with dynamic version detection)
+# Layer 4: Database — PostgreSQL
 # ─────────────────────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql postgresql-client \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Layer 5: Kali Linux repo — SAFE PINNING (priority 50)
+# Layer 5: Additional package repository
+# Pin priority 50 — only installs when explicitly requested
 # ─────────────────────────────────────────────────────────────────────────────
 RUN printf 'Package: *\nPin: release o=Kali\nPin-Priority: 50\n' \
-    > /etc/apt/preferences.d/kali-prefs
+    > /etc/apt/preferences.d/extra-prefs
 
 RUN printf 'Package: openssl-provider-legacy\nPin: release *\nPin-Priority: -1\n' \
-    > /etc/apt/preferences.d/no-kali-openssl
+    > /etc/apt/preferences.d/no-legacy-openssl
 
 RUN wget -qO- https://archive.kali.org/archive-key.asc \
     | gpg --dearmor -o /usr/share/keyrings/kali-archive-keyring.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/kali-archive-keyring.gpg arch=amd64] \
     http://http.kali.org/kali kali-rolling main contrib non-free" \
-    > /etc/apt/sources.list.d/kali.list
+    > /etc/apt/sources.list.d/extra.list
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Layer 6: Kali tools — EACH IN OWN RUN with fallback
+# Layer 6: Network analysis and development tools
+# Each in own RUN with fallback
 # ─────────────────────────────────────────────────────────────────────────────
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends -t kali-rolling nmap \
-    || echo "[WARN] nmap install failed, skipping" \
+    || echo "[WARN] nmap install failed" \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends -t kali-rolling whois \
-    || echo "[WARN] whois install failed, skipping" \
+    || echo "[WARN] whois install failed" \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends -t kali-rolling sqlmap \
-    || echo "[WARN] sqlmap install failed, skipping" \
+    || echo "[WARN] sqlmap install failed" \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends -t kali-rolling hydra \
-    || echo "[WARN] hydra install failed, skipping" \
+    || echo "[WARN] hydra install failed" \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends -t kali-rolling john \
-    || echo "[WARN] john install failed, skipping" \
+    || echo "[WARN] john install failed" \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends -t kali-rolling nikto \
-    || echo "[WARN] nikto install failed, skipping" \
+    || echo "[WARN] nikto install failed" \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends -t kali-rolling dirb \
-    || echo "[WARN] dirb install failed, skipping" \
+    || echo "[WARN] dirb install failed" \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends -t kali-rolling gobuster \
-    || echo "[WARN] gobuster install failed, skipping" \
+    || echo "[WARN] gobuster install failed" \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends -t kali-rolling dnsenum \
-    || echo "[WARN] dnsenum install failed, skipping" \
+    || echo "[WARN] dnsenum install failed" \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends -t kali-rolling theharvester \
-    || echo "[WARN] theharvester install failed, skipping" \
+    || echo "[WARN] theharvester install failed" \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends -t kali-rolling whatweb \
-    || echo "[WARN] whatweb install failed, skipping" \
+    || echo "[WARN] whatweb install failed" \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends \
     netcat-openbsd tcpdump proxychains4 \
-    || echo "[WARN] Some network tools install failed, skipping" \
+    || echo "[WARN] Some network tools install failed" \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     apt-get install -y --no-install-recommends -t kali-rolling wordlists \
-    || echo "[WARN] wordlists install failed, skipping" \
+    || echo "[WARN] wordlists install failed" \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -176,7 +169,7 @@ RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
 RUN apt-get update && apt-get -y --fix-broken install 2>/dev/null; \
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs \
-    || (echo "[WARN] NodeSource failed, using Ubuntu repo Node.js" \
+    || (echo "[WARN] NodeSource failed, using Ubuntu repo" \
         && apt-get update && apt-get install -y nodejs npm) \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -186,12 +179,8 @@ RUN npm install -g code-server@latest 2>/dev/null \
 RUN node --version || echo "[WARN] Node.js not installed"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Layer 8: KasmVNC Configuration
+# Layer 8: Configuration files
 # ─────────────────────────────────────────────────────────────────────────────
-# Create KasmVNC config directory
-RUN mkdir -p /root/.vnc /root/.kasmpasswd
-
-# Copy configuration files
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY scripts/ /app/scripts/
 

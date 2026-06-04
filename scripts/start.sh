@@ -1,30 +1,28 @@
 #!/bin/bash
 # ============================================================================
-# Cloud Desktop OS v7 — Startup Script
-# KasmVNC-based desktop (NOT VNC — completely different product/protocol)
-# Fallback: noVNC + desktop-server (x11vnc renamed) if KasmVNC unavailable
+# Web Development Environment — Startup Script
+# KasmVNC-based web workspace
 # ============================================================================
 
 # No set -e — continue even if minor things fail
 
 echo "============================================"
-echo "  Cloud Desktop OS v7 — Starting Up"
-echo "  KasmVNC Web Desktop (or noVNC fallback)"
+echo "  Web Dev Environment — Starting Up"
 echo "============================================"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Password Setup
 # ─────────────────────────────────────────────────────────────────────────────
-DESKTOP_PASSWORD="${VNC_PASSWORD:-cloudos2024}"
+APP_PASSWORD="${APP_PASSWORD:-cloudos2024}"
 mkdir -p /root/.vnc /root/.kasmpasswd
 
 if command -v vncserver &> /dev/null; then
     echo "[INFO] KasmVNC detected — configuring..."
 
-    # Set KasmVNC password using kasmvncpasswd
+    # Set KasmVNC password
     if command -v kasmvncpasswd &> /dev/null; then
-        echo "$DESKTOP_PASSWORD" | kasmvncpasswd -u root -w - 2>/dev/null \
-            || echo "[WARN] kasmvncpasswd failed, using alternative method"
+        echo "$APP_PASSWORD" | kasmvncpasswd -u root -w - 2>/dev/null \
+            || echo "[WARN] kasmvncpasswd failed"
     fi
 
     # Create KasmVNC config
@@ -54,30 +52,21 @@ server:
   ipv6: false
 KASMEOF
 
-    # Also set VNC password the traditional way (for vncserver -passwd)
-    x11vnc -storepasswd "$DESKTOP_PASSWORD" /root/.vnc/passwd 2>/dev/null || true
+    # Set traditional password too
+    if command -v x11vnc &> /dev/null; then
+        x11vnc -storepasswd "$APP_PASSWORD" /root/.vnc/passwd 2>/dev/null || true
+    fi
 
     echo "[OK] KasmVNC configured"
 else
-    echo "[INFO] KasmVNC not found — configuring noVNC fallback..."
-
-    # Fallback: set x11vnc/desktop-server password
-    if [ -f /usr/bin/desktop-server ]; then
-        /usr/bin/desktop-server -storepasswd "$DESKTOP_PASSWORD" /root/.vnc/passwd 2>/dev/null || true
-    elif command -v x11vnc &> /dev/null; then
-        x11vnc -storepasswd "$DESKTOP_PASSWORD" /root/.vnc/passwd 2>/dev/null || true
-    fi
-
-    echo "[OK] noVNC fallback configured"
+    echo "[WARN] KasmVNC not found"
 fi
-
-chmod 600 /root/.vnc/passwd 2>/dev/null || true
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. B2 Restore (if credentials provided)
 # ─────────────────────────────────────────────────────────────────────────────
 if [ -n "$B2_ACCOUNT_ID" ] && [ -n "$B2_ACCOUNT_KEY" ] && [ -n "$B2_BUCKET_NAME" ]; then
-    echo "[INFO] Restoring persistent data from Backblaze B2..."
+    echo "[INFO] Restoring data from cloud storage..."
     mkdir -p /root/persistent
     rclone sync \
         --b2-account="$B2_ACCOUNT_ID" \
@@ -86,10 +75,10 @@ if [ -n "$B2_ACCOUNT_ID" ] && [ -n "$B2_ACCOUNT_KEY" ] && [ -n "$B2_BUCKET_NAME"
         --checkers=8 \
         --retries=3 \
         :b2:"$B2_BUCKET_NAME" /root/persistent/ \
-    && echo "[OK] B2 restore complete" \
-    || echo "[WARN] B2 restore failed, continuing with empty persistent dir"
+    && echo "[OK] Cloud restore complete" \
+    || echo "[WARN] Cloud restore failed, continuing with empty dir"
 else
-    echo "[INFO] B2 credentials not set, skipping restore"
+    echo "[INFO] Cloud credentials not set, skipping restore"
     mkdir -p /root/persistent
 fi
 
@@ -205,10 +194,10 @@ echo "[OK] Desktop icons created"
 # ─────────────────────────────────────────────────────────────────────────────
 # 7. .bashrc Additions
 # ─────────────────────────────────────────────────────────────────────────────
-if ! grep -q "# Cloud Desktop OS" /root/.bashrc 2>/dev/null; then
+if ! grep -q "# Web Dev Environment" /root/.bashrc 2>/dev/null; then
     cat >> /root/.bashrc << 'BASHEOF'
 
-# Cloud Desktop OS v7
+# Web Dev Environment
 export PATH="$PATH:/usr/local/bin"
 alias ll='ls -la'
 alias update='apt-get update && apt-get upgrade -y'
